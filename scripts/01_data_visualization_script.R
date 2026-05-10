@@ -1,4 +1,5 @@
-#R code to reproduce statistics and visuals
+
+#R code to reproduce statistics and visuals in Ida attribution paper
 
 #Libraries----------
 library(tidyverse)
@@ -7,58 +8,21 @@ library(sf)
 library(cowplot)
 library(ggpubr)
 
-#Tract-level data-------------
+#Folder to output visuals
+if(!dir.exists("figures")) dir.create("figures")
+
+#Tract-level Ida impact data-------------
 dta <- read_csv("tract_data/ida_data_tract.csv") 
 
-#Sums-------------
-vars <- c("dmg_wind_total_tract_1971",
-          "dmg_wind_total_tract_2021",
-          "dmg_wind_total_tract_2071",
-          
-          "affected_wind_over5k_tract_1971",
-          "affected_wind_over5k_tract_2021",
-          "affected_wind_over5k_tract_2071",
-          
-          "dmg_wind_total_residential_tract_1971",
-          "dmg_wind_total_residential_tract_2021",
-          "dmg_wind_total_residential_tract_2071",
-          
-          "dmg_wind_total_commercial_tract_1971",
-          "dmg_wind_total_commercial_tract_2021",
-          "dmg_wind_total_commercial_tract_2071",
-          
-          "dmg_wind_total_industrial_tract_1971",
-          "dmg_wind_total_industrial_tract_2021",
-          "dmg_wind_total_industrial_tract_2071",
-          
-          "dmg_wind_total_public_tract_1971",
-          "dmg_wind_total_public_tract_2021",
-          "dmg_wind_total_public_tract_2071",
-          
-          #surge
-          "dmg_surge_total_tract_1971",
-          "dmg_surge_total_tract_2021",
-          "dmg_surge_total_tract_2071",
-          
-          "affected_surge_over5k_tract_1971",
-          "affected_surge_over5k_tract_2021",
-          "affected_surge_over5k_tract_2071",
-          
-          "dmg_surge_total_residential_tract_1971",
-          "dmg_surge_total_residential_tract_2021",
-          "dmg_surge_total_residential_tract_2071",
-          
-          "dmg_surge_total_commercial_tract_1971",
-          "dmg_surge_total_commercial_tract_2021",
-          "dmg_surge_total_commercial_tract_2071",
-          
-          "dmg_surge_total_industrial_tract_1971",
-          "dmg_surge_total_industrial_tract_2021",
-          "dmg_surge_total_industrial_tract_2071",
-          
-          "dmg_surge_total_public_tract_1971",
-          "dmg_surge_total_public_tract_2021",
-          "dmg_surge_total_public_tract_2071")
+#Damage and # affected building sums for figures-------------
+vars <- 
+  dta %>%
+    select(
+      matches("dmg_(wind|surge)_total_tract_(1971|2021|2071)$"),
+      matches("affected_(wind|surge)_over5k_tract_(1971|2021|2071)$"),
+      matches("dmg_(wind|surge)_total_(residential|commercial|industrial|public)_tract_(1971|2021|2071)$")
+    ) %>%
+    names() 
 
 sums <- sapply(vars, function(x) sum(dta[[x]], na.rm = T))
 list2env(as.list(sums), envir = .GlobalEnv)
@@ -72,6 +36,18 @@ p_change <- function(old, new) {
   return(x)
 }
 ##Total damage under 1971, 2021, 2071 scenarios-----
+
+tibble(
+  dmg1971 = dmg_wind_total_tract_1971 + dmg_surge_total_tract_1971,
+  dmg2021 = dmg_wind_total_tract_2021 + dmg_surge_total_tract_2021,
+  dmg2071 = dmg_wind_total_tract_2071 + dmg_surge_total_tract_2071,
+  change2021_1971 = dmg2021 - dmg1971,
+  '2021 - 1971 (%)' = p_change(dmg1971, dmg2021),
+  change2021_2071 = dmg2071 - dmg2021,
+  '2071-2021 (%)' = p_change(dmg2021, dmg2071),
+  change2071_1971 = dmg2071 - dmg1971,
+  '2071-1971 (%)' = p_change(dmg1971, dmg2071)
+) 
 
 tibble(
   hazard = c("wind", "surge"),
@@ -101,6 +77,17 @@ tibble(
   '2071-2021 (%)' = p_change(affected2021, affected2071),
   change2071_1971 = affected2071 - affected1971,
   '2071-1971 (%)' = p_change(affected1971, affected2071)
+)
+
+##Damage per structure
+tibble(
+  hazard = c("wind", "surge"),
+  dmg_p_bld1971 = c(dmg_wind_total_tract_1971 / affected_wind_over5k_tract_1971, 
+                    dmg_surge_total_tract_1971 / affected_surge_over5k_tract_1971),
+  dmg_p_bld2021 = c(dmg_wind_total_tract_2021 / affected_wind_over5k_tract_2021, 
+                    dmg_surge_total_tract_2021 / affected_surge_over5k_tract_2021),
+  dmg_p_bld2071 = c(dmg_wind_total_tract_2071 / affected_wind_over5k_tract_2071, 
+                    dmg_surge_total_tract_2071 / affected_surge_over5k_tract_2071),
 )
 
 ##Total damage per structure under 1971, 2021, and 2071 scenarios-------------
@@ -302,7 +289,7 @@ damage_per_building <-
 
 damage_per_building
 
-#### Arrange-------------
+#### Arrange & Save-------------
 combined_damage_figure <- #legend on the left
   ggdraw() +
   draw_plot(damage_visual + 
@@ -319,7 +306,8 @@ combined_damage_figure
 
 ggsave(
   combined_damage_figure,
-  file = "figures/total_damage.png",
+  file = "figures/figure_4_total_damage.png",
+  dpi = 1000,
   height = 6,
   width = 6.6
 )
@@ -532,7 +520,7 @@ surge_ind_pub <-
 
 surge_ind_pub
 
-###Arrange--------------
+###Arrange & Save--------------
 damage_by_structure <- ggarrange(wind_res_com, wind_ind_pub,
                                  surge_res_com, surge_ind_pub, 
                                  common.legend = T, 
@@ -542,12 +530,38 @@ damage_by_structure
 
 ggsave(
   plot = damage_by_structure,
-  "figures/damage_by_structure_type.png",
+  "figures/figure_9_damage_by_structure_type.png",
+  dpi = 1000,
   width = 6,
   height = 4.5)
 
-#Maps--------------
-##Map Data----------------
+#Map Data---------------------------------------------------------------------------
+damage_map_colors = c("grey90",
+                      "#ffffcc", 
+                      "#c7e9b4",
+                      "#7fcdbb",
+                      "#41b6c4",
+                      "#0c2c84")
+
+damage_pchange_map_colors = c("grey90", 
+                              "grey79",
+                              "#ffffcc",
+                              "#c2e699",
+                              "#78c679",
+                              "#238443")
+
+water_color <- "#C2EBFA"
+outline_color = "grey50"
+outline_w = .5
+nola_color = "navy"
+nola_outline_color = "black"
+nola_outline_w = 1
+ida_track_color = "#d8b365"
+ida_lwd = 1.5
+ida_dot = .3
+text_size = .6
+
+##Read layers----------------
 st_layers("tract_data/map_layers.gpkg")
 
 tract_shp <- 
@@ -574,7 +588,7 @@ major_water <-
   st_read("tract_data/map_layers.gpkg", 
           layer = "major_water_shp")
 
-###Bounding boxes--------------
+##Bounding boxes--------------
 #main map 
 box <- tract_shp %>%
   filter(
@@ -599,7 +613,7 @@ zoom_box[4] <- zoom_box[4] - 20000 # ymax
 
 zoom_box_poly <- st_as_sfc(zoom_box)
 
-###Merge to tract-level data-------------------
+##Merge to tract-level data-------------------
 dta_sf <-
   tract_shp %>%
   right_join(dta, by = "tractid") %>%
@@ -641,36 +655,17 @@ tract_shp_crop <-
   tract_shp %>%
   st_crop(box_poly)
 
-##Attributed:Non-Attributed Damage Ratio Maps------------
-###Settings---------
-main_map_colors = c("grey90",
-                    "grey70",
-                    "#ffffcc",
-                    "#c7e9b4",
-                    "#41b6c4",
-                    "#0c2c84")
-
-water_color <- "#C2EBFA"
-outline_color = "grey50"
-outline_w = .5
-nola_color = "navy"
-nola_outline_color = "black"
-nola_outline_w = 1
-ida_track_color = "#d8b365"
-ida_lwd = 1.5
-ida_dot = .3
-text_size = .6
-
+##Basemap---------------------
 basemap <-
   tm_shape(box_poly, is.main = T) +
   tm_shape(tract_shp_crop, bbox = box) +
-  tm_fill(main_map_colors[1]) +
+  tm_fill(damage_map_colors[1]) +
   tm_borders(col = outline_color, lwd = outline_w) 
 
 inset_basemap <-
   tm_shape(zoom_box_poly, is.main = T) +
   tm_shape(tract_shp_crop, bbox = box) +
-  tm_fill(main_map_colors[1]) +
+  tm_fill(damage_map_colors[1]) +
   tm_borders(col = outline_color, lwd = outline_w) 
 
 map_elements <-
@@ -707,273 +702,148 @@ inset_map_elements <-
               position = tm_pos_in(0.0025, 1)) +
   tm_options(component.autoscale = F)
 
-### Functions-----------
-pretty_main_ratio_map <- function(var) {
-  basemap +
-    tm_shape(dta_sf) +
-    tm_fill(var,
-            fill.scale = tm_scale_categorical(values = main_map_colors)) +
-    tm_borders(col = outline_color, lwd = outline_w) + 
-    tm_compass(position = tm_pos_in(0, 0.2), 
-               size = 1.5, color.dark = "grey30") +
-    map_elements +
-    tm_layout(legend.show = F, frame = F) 
-}
-pretty_inset_ratio_map <- function(var) {
-  inset_basemap +
-    tm_shape(dta_sf) +
-    tm_fill(var,
-            fill.scale = tm_scale_categorical(values = main_map_colors),
-            fill.legend = tm_legend(frame = F, 
-                                    title = "Percent Change",
-                                    title.fontfamily = "serif", 
-                                    title.size = text_size + .2,
-                                    text.fontfamily = "serif",
-                                    text.size = text_size,
-                                    margins = c(.5, 0, 0, 0)
-            )
-    ) +
-    tm_borders(col = outline_color, lwd = outline_w) + 
-    inset_map_elements +
-    tm_add_legend(
-      title = "\n",
-      labels = " Hurricane Ida Track",
-      size = text_size,
-      col = ida_track_color,
-      lwd = ida_lwd,
-      type = "lines"
-    ) +
-    tm_layout(
-      legend.stack = "horizontal",
-      legend.text.fontfamily = "serif",
-      legend.text.size = text_size,
-      frame.color = nola_outline_color,
-      frame.lwd = outline_w
-    )
-}
 
-pretty_arranged_ratio_map <- 
-  function(pretty_main1971to2021, pretty_inset1971to2021,
-           pretty_main2021to2071, pretty_inset2021to2071) {
-    tmap_arrange(pretty_main1971to2021 + 
-                   tm_title_in("a) 1971 to 2021", 
-                               position = c(0.025, .95), 
-                               bg = T,
-                               bg.color = "white", 
-                               frame.color ="black", size = 1), 
-                 pretty_inset1971to2021 + 
-                   tm_layout(asp = 1.8),
-                 pretty_main2021to2071 +
-                   tm_title_in("b) 2021 to 2071", 
-                               position = c(0.025, .95),
-                               bg = T,
-                               bg.color = "white", 
-                               frame.color ="black", size = 1),
-                 pretty_inset2021to2071 + 
-                   tm_layout(asp = 1.8),
-                 
-                 ncol = 2,
-                 widths = c(.65,.35)
-    )
-  }
+##Functions--------------
+source("scripts/00_map_functions.R")
 
-### Create maps--------
-map_main_wind_1971to2021 <-
-  pretty_main_ratio_map("dmg_cc_wind_total_tract_1971to2021_ratio_mlt")
+#Total Damage Maps (raw values)------------------------------------------------
 
-map_inset_wind_1971to2021 <-
-  pretty_inset_ratio_map("dmg_cc_wind_total_tract_1971to2021_ratio_mlt")
-
-map_main_wind_2021to2071 <-
-  pretty_main_ratio_map("dmg_cc_wind_total_tract_2021to2071_ratio_mlt")
-
-map_inset_wind_2021to2071 <-
-  pretty_inset_ratio_map("dmg_cc_wind_total_tract_2021to2071_ratio_mlt")
-
-#surge maps
-map_main_surge_1971to2021 <-
-  pretty_main_ratio_map("dmg_cc_surge_total_tract_1971to2021_ratio_mlt")
-
-map_inset_surge_1971to2021 <-
-  pretty_inset_ratio_map("dmg_cc_surge_total_tract_1971to2021_ratio_mlt")
-
-map_main_surge_2021to2071 <-
-  pretty_main_ratio_map("dmg_cc_surge_total_tract_2021to2071_ratio_mlt")
-
-map_inset_surge_2021to2071 <-
-  pretty_inset_ratio_map("dmg_cc_surge_total_tract_2021to2071_ratio_mlt")
-
-#arrange
-wind_ratio_combined <-
-  pretty_arranged_ratio_map(map_main_wind_1971to2021, 
-                            map_inset_wind_1971to2021,
-                            map_main_wind_2021to2071,
-                            map_inset_wind_2021to2071)
-
-surge_ratio_combined <-
-  pretty_arranged_ratio_map(map_main_surge_1971to2021, 
-                            map_inset_surge_1971to2021,
-                            map_main_surge_2021to2071,
-                            map_inset_surge_2021to2071)
-### Save------------
-tmap_save(
-  wind_ratio_combined,
-  "figures/wind_ratio_combined_maps.png",
-  height = 6.8,
-  width = 6.3
-)
-
-tmap_save(
-  surge_ratio_combined,
-  "figures/surge_ratio_combined_maps.png",
-  height = 6.8,
-  width = 6.3
-)
-
-##Supplemental Maps---------------------
-###Settings--------
-supplemental_map_colors = c("grey90",
-                            "#ffffcc", 
-                            "#c7e9b4",
-                            "#7fcdbb",
-                            "#41b6c4",
-                            "#0c2c84")
-
-
-
-###Functions------------
-pretty_main_sup_map <- function(var) {
-  basemap +
-    tm_shape(dta_sf) +
-    tm_fill(var,
-            fill.scale = 
-              tm_scale_categorical(values = supplemental_map_colors)) +
-    tm_borders(col = outline_color, lwd = outline_w) + 
-    tm_compass(position = tm_pos_in(0, 0.225), 
-               size = 1.5, color.dark = "grey30") +
-    tm_layout(legend.show = F, frame = F, asp = 1) +
-    map_elements
-}
-
-pretty_inset_sup_map <- function(var) {
-  inset_basemap +
-    tm_shape(dta_sf) +
-    tm_fill(var,
-            fill.scale = 
-              tm_scale_categorical(values = supplemental_map_colors),
-            fill.legend = tm_legend(frame = F, 
-                                    title = "Total Damage",
-                                    title.fontfamily = "serif", 
-                                    title.size = text_size + .2,
-                                    text.fontfamily = "serif",
-                                    text.size = text_size - .05,
-                                    margins = c(0, 0, .5, 0)
-            )) +
-    tm_borders(col = outline_color, lwd = outline_w) + 
-    inset_map_elements +
-    tm_add_legend(
-      title = "\n",
-      labels = " Hurricane Ida Track",
-      size = text_size,
-      col = ida_track_color,
-      lwd = ida_lwd,
-      type = "lines"
-    ) +
-    tm_layout(
-      legend.stack = "horizontal",
-      legend.text.fontfamily = "serif",
-      legend.text.size = text_size - .05,
-      frame.color = nola_outline_color,
-      frame.lwd = outline_w
-    )
-}
-
-pretty_arranged_sup_map <- 
-  function(pretty_main1971, pretty_inset1971,
-           pretty_main2021, pretty_inset2021,
-           pretty_main2071, pretty_inset2071) {
-    tmap_arrange(pretty_main1971 + tm_title_in("a) 1971", 
-                                               bg = T, bg.color = "white", 
-                                               frame.color ="black", size = 1),
-                 pretty_inset1971,
-                 pretty_main2021 + tm_title_in("b) 2021", 
-                                               bg = T, bg.color = "white", 
-                                               frame.color ="black", size = 1),
-                 pretty_inset2021,
-                 pretty_main2071 + tm_title_in("c) 2071", 
-                                               bg = T,
-                                               bg.color = "white", 
-                                               frame.color ="black", size = 1),
-                 pretty_inset2071,
-                 nrow = 3,
-                 widths = c(.65,.35)
-    )
-  }
-
-###Create maps------------
-# wind
+###Wind---------------------
 map_main_wind_1971 <-
-  pretty_main_sup_map("dmg_wind_total_tract_1971_mlt7")
+  fun_main_damage_map("dmg_wind_total_tract_1971_mlt7")
 
 map_inset_wind_1971 <- 
-  pretty_inset_sup_map("dmg_wind_total_tract_1971_mlt7")
+  fun_inset_damage_map("dmg_wind_total_tract_1971_mlt7")
 
 map_main_wind_2021 <-
-  pretty_main_sup_map("dmg_wind_total_tract_2021_mlt7")
+  fun_main_damage_map("dmg_wind_total_tract_2021_mlt7")
 
 map_inset_wind_2021 <-
-  pretty_inset_sup_map("dmg_wind_total_tract_2021_mlt7")
+  fun_inset_damage_map("dmg_wind_total_tract_2021_mlt7")
 
 map_main_wind_2071 <-
-  pretty_main_sup_map("dmg_wind_total_tract_2071_mlt7")
+  fun_main_damage_map("dmg_wind_total_tract_2071_mlt7")
 
 map_inset_wind_2071 <-
-  pretty_inset_sup_map("dmg_wind_total_tract_2071_mlt7")
+  fun_inset_damage_map("dmg_wind_total_tract_2071_mlt7")
 
-# surge
+###Surge-----------------------------
 map_main_surge_1971 <-
-  pretty_main_sup_map("dmg_surge_total_tract_1971_mlt7")
+  fun_main_damage_map("dmg_surge_total_tract_1971_mlt7")
 
 map_inset_surge_1971 <- 
-  pretty_inset_sup_map("dmg_surge_total_tract_1971_mlt7")
+  fun_inset_damage_map("dmg_surge_total_tract_1971_mlt7")
 
 map_main_surge_2021 <-
-  pretty_main_sup_map("dmg_surge_total_tract_2021_mlt7")
+  fun_main_damage_map("dmg_surge_total_tract_2021_mlt7")
 
 map_inset_surge_2021 <-
-  pretty_inset_sup_map("dmg_surge_total_tract_2021_mlt7")
+  fun_inset_damage_map("dmg_surge_total_tract_2021_mlt7")
 
 map_main_surge_2071 <-
-  pretty_main_sup_map("dmg_surge_total_tract_2071_mlt7")
+  fun_main_damage_map("dmg_surge_total_tract_2071_mlt7")
 
 map_inset_surge_2071 <-
-  pretty_inset_sup_map("dmg_surge_total_tract_2071_mlt7")
+  fun_inset_damage_map("dmg_surge_total_tract_2071_mlt7")
 
 #arrange
 wind_total_damage_combined <-
-  pretty_arranged_sup_map(map_main_wind_1971, map_inset_wind_1971,
-                          map_main_wind_2021, map_inset_wind_2021,
-                          map_main_wind_2071, map_inset_wind_2071)
+  fun_arrange_maps(map_main_wind_1971, map_inset_wind_1971,
+                    map_main_wind_2021, map_inset_wind_2021,
+                    map_main_wind_2071, map_inset_wind_2071)
 surge_total_damage_combined <-
-  pretty_arranged_sup_map(map_main_surge_1971, map_inset_surge_1971,
-                          map_main_surge_2021, map_inset_surge_2021,
-                          map_main_surge_2071, map_inset_surge_2071)
+  fun_arrange_maps(map_main_surge_1971, map_inset_surge_1971,
+                      map_main_surge_2021, map_inset_surge_2021,
+                      map_main_surge_2071, map_inset_surge_2071)
 
 ###Save----------
 tmap_save(
   wind_total_damage_combined,
-  "figures/supplemental_wind_total_damage.png",
+  "figures/figure_5_total_wind_damage.png",
+  dpi = 1000,
   height = 8.4,
   width = 5.17
 )
 
 tmap_save(
   surge_total_damage_combined,
-  "figures/supplemental_surge_total_damage.png",
+  "figures/figure_7_total_surge_damage.png",
+  dpi = 1000,
   height = 8.4,
   width = 5.17
 )
 
+
+#Total Damage Percent Change Maps -------------------------------------------
+
+##Wind--------
+map_main_wind_1971to2021 <-
+  fun_main_damage_pchange_map("dmg_cc_wind_total_tract_1971to2021_ratio_mlt")
+
+map_inset_wind_1971to2021 <-
+  fun_inset_damage_pchange_map("dmg_cc_wind_total_tract_1971to2021_ratio_mlt")
+
+wind_green_border <- #lighter border for dark green symbology
+  tm_shape(filter(dta_sf,
+           dmg_cc_wind_total_tract_2021to2071_ratio_mlt == "100% or more")) + 
+  tm_borders("#71a881", lwd = outline_w)
+
+map_main_wind_2021to2071 <-
+  fun_main_damage_pchange_map("dmg_cc_wind_total_tract_2021to2071_ratio_mlt") +
+  wind_green_border
+
+map_inset_wind_2021to2071 <-
+  fun_inset_damage_pchange_map("dmg_cc_wind_total_tract_2021to2071_ratio_mlt") +
+  wind_green_border
+
+##Surge------------
+map_main_surge_1971to2021 <-
+  fun_main_damage_pchange_map("dmg_cc_surge_total_tract_1971to2021_ratio_mlt")
+
+map_inset_surge_1971to2021 <-
+  fun_inset_damage_pchange_map("dmg_cc_surge_total_tract_1971to2021_ratio_mlt")
+
+surge_green_border <-
+  tm_shape(filter(dta_sf,
+           dmg_cc_surge_total_tract_2021to2071_ratio_mlt == "10.0% or more")) + 
+    tm_borders("#71a881", lwd = outline_w)
+
+map_main_surge_2021to2071 <-
+  fun_main_damage_pchange_map("dmg_cc_surge_total_tract_2021to2071_ratio_mlt") +
+  surge_green_border
+
+map_inset_surge_2021to2071 <-
+  fun_inset_damage_pchange_map("dmg_cc_surge_total_tract_2021to2071_ratio_mlt") +
+  surge_green_border
+
+#arrange
+wind_ratio_combined <-
+  fun_arrange_pchange_map(map_main_wind_1971to2021, 
+                            map_inset_wind_1971to2021,
+                            map_main_wind_2021to2071,
+                            map_inset_wind_2021to2071)
+
+surge_ratio_combined <-
+  fun_arrange_pchange_map(map_main_surge_1971to2021, 
+                            map_inset_surge_1971to2021,
+                            map_main_surge_2021to2071,
+                            map_inset_surge_2021to2071)
+##Save------------
+tmap_save(
+  wind_ratio_combined,
+  "figures/figure_6_wind_pchange_map.png",
+  dpi = 1000,
+  height = 6.8,
+  width = 6.3
+)
+
+tmap_save(
+  surge_ratio_combined,
+  "figures/figure_8_surge_pchange_map.png",
+  dpi = 1000,
+  height = 6.8,
+  width = 6.3
+)
 
 
 
